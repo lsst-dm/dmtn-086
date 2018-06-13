@@ -1,0 +1,334 @@
+
+
+\documentclass[DM,authoryear,toc]{lsstdoc}
+% lsstdoc documentation: https://lsst-texmf.lsst.io/lsstdoc.html
+
+% Package imports go here.
+
+% Local commands go here.
+
+% To add a short-form title:
+% \title[Short title]{Title}
+\title{Next-to-the-Database Processing Use Cases}
+
+% Optional subtitle
+% \setDocSubtitle{A subtitle}
+
+\author{%
+Colin Slater
+}
+
+\setDocRef{DMTN-086}
+
+\date{\today}
+
+% Optional: name of the document's curator
+% \setDocCurator{The Curator of this Document}
+
+\setDocAbstract{%
+Abstract text.
+}
+
+% Change history defined here.
+% Order: oldest first.
+% Fields: VERSION, DATE, DESCRIPTION, OWNER NAME.
+% See LPM-51 for version number policy.
+\setDocChangeRecord{%
+  \addtohist{1}{2018-03-25}{Unreleased.}{Colin Slater}
+}
+
+\begin{document}
+
+% Create the title page.
+% Table of contents is added automatically with the "toc" class option.
+\maketitle
+
+
+\textbf{These use cases are \textit{\underline{not}} requirements!} The goal of
+this document is to describe a wide variety of notional use cases that may be
+productively met by a next-to-the-database processing system. Despite this goal,
+some of these use cases may turn out to be better served by a relational
+database, and some may be fall out of scope of the LSST database effort entirely
+if they impose excessive resource requirements.
+
+
+\section{Milky Way}
+
+\subsection{Milky Way Density Maps}
+\label{mw_density}
+
+\begin{itemize}
+  \item \textbf{Goal}: Produce all-sky maps of stellar density.
+  \item \textbf{Data}: Object table, psRa, psDecl, [gri]PsFlux, [gri]PsFluxSigma,
+  extendedness, flags.
+  \item \textbf{Processing}:
+    \begin{enumerate}
+      \item Select a set of stars based on \texttt{extendedness} and color.
+      Typical selections are for main-sequence turn-off stars, or blue
+      horizontal branch stars, or giants. Apparent magnitude cuts can be used as
+      a proxy for distance cuts, creating maps in spherical shells around the
+      Sun.
+      \item Pass these stars to a function which projects them onto an
+      equal-area coordinate system, which is split into ~1000x1000 pixels
+      covering the entire sky. Additional preprocessing of stars, such as
+      dereddening, may also be applied.
+      \item Count stars falling into each pixel; essentially creating a 2D
+      histogram. This can be computed in several spatial partitions and then
+      directly summed. The output data volume is of order megabytes, but more
+      sophisticated versions returning several distance slices simultaneously
+      could be hundreds of megabytes.
+    \end{enumerate}
+  \item \textbf{Performance Expectation}: This process is expected to be
+  IO-limited, as the coordinate transform and binning is inexpensive. One could
+  reasonably expect similar performance on this as any other full table scan.
+\end{itemize}
+
+\subsection{Maps of Stellar Properties}
+
+\begin{itemize}
+  \item \textbf{Goal}: Produce maps of mean quantities in spatial cells across
+  the Milky Way. This could be mean metallicities, proper motions, or other
+  transformed velocities,
+  \item \textbf{Data}: Point-source photometry from \texttt{Object}, as in
+  case~\ref{mw_density}, Optionally psParallax, psMuRa, PsMuDecl, and their
+  associated uncertainties.
+  \item \textbf{Processing}:
+    \begin{enumerate}
+      \item Select the target type of stars, as in case~\ref{mw_density}.
+      \item Reproject into the desired output coordinate system. For example,
+      many maps of this sort look at a vertical slices through the Galaxy, as in
+      Figure 7.2 in the Science Book.
+      \item Estimate, for example, the metallicity of each star in the sample
+      based on \texttt{ugri} photometry, as per Ivezi\'{c} et al. 2008.
+      Alternatively, there are numerous dynamical computations one can perform,
+      particularly when accurate proper motions are available.
+      \item For each spatial bin compute a summary statistic on the quantity of
+      interest. Computing the mean is easily understandable and can be
+      parallelized by separately summing the quantity and the number of stars
+      included in the summation, then only dividing these two numbers after all
+      partitions have been processed.
+      \item Return the map, which is of order 1000x1000 pixels. If multiple maps
+      are made in different slices through the Galaxy, the data volume scales proportionally.
+    \end{enumerate}
+    \item \textbf{Performance Expectation}: Similar performance as
+    \ref{mw_density}; comparable to other full table scans.
+\end{itemize}
+
+\subsection{Finding Milky Way Satellites}
+\label{mw_sats}
+
+This case is a variation of Section~\ref{mw_density}, with similar columns but with
+a much finer grid of the resulting maps. Dwarf galaxies often appear as
+densities in MSTO stars, or in more distant cases, red giant branch stars, and
+these overdensities can be much smaller on the sky than the typical halo
+substructure studied in case~\ref{mw_density}. The required binning is of order
+tens of arcminutes for Milky Way satellites, or single arcminute scales for
+satellites of other galaxies. Data volumes are consequently tens to hundreds of
+times greater than that of case~\ref{mw_density}.
+
+\subsection{Color-magnitude diagrams}
+
+Given a region on the sky, ~few square degrees, a common method for characterizing
+stellar populations is to create a binned color-magnitude diagram. The size
+scales for this are larger than the typical ``one point per star''
+color-magnitude diagrams, which makes it useful to bin the data while it is
+next-to-the-database.
+
+\begin{itemize}
+  \item \textbf{Goal}: Create binned CMD of areas ranging from a few arcminutes
+  to square degrees.
+  \item \textbf{Data}: \texttt{Object} point source photometry in multiple
+  colors, \texttt{extendedness}.
+  \item \textbf{Process}:
+    \begin{enumerate}
+      \item Select stars inside a desired region on the sky. This could be
+      rectangular RA, Dec bounds, or a circle around a point, etc.
+      \item Bin the stars into a 2D-histogram with color as one axis, apparent
+      magnitude as the other axis.
+      \item Sum all histograms, if computed in multiple partitions.
+    \end{enumerate}
+  \item \textbf{Performance Expectation}: Ideally, these could be produced on an
+  interactive timescale. The data volumes are not inherently very large.
+\end{itemize}
+
+\section{Time Series Analysis}
+
+\subsection{Custom Periodograms}
+
+\subsection{Custom light curve features}
+\label{lc_features}
+
+A basic step in identifying transient events is to compute a variety of
+non-parametric features which broadly characterize the light curve. This
+includes quantities such as the speed and amplitude of an initial brightness
+increase, the duration of an event, time of peak brightness, or the rate of
+dimming after peak brightness. These quantities are useful for pre-selecting
+candidates of a given type of transient event, which then may be followed up
+with more detailed fitting or classification procedures. While many of these
+features will already be computed by LSST, it is likely that users will want to
+try new features, or their own measurement methods.
+
+These features may also correspond to classification methods used on the online
+alert stream, for which it is useful to have an offline method for testing new
+classification methods before relying on them in the nightly alert stream processing.
+
+\begin{itemize}
+  \item \textbf{Goal}: Identify non-parametric features for light curves, such
+  as rate of increase in brightness, duration of an event, or time between first
+  measurement and peak brightness. The result could be feature values for a
+  large number of Objects, or only those where features exceed some threshold.
+  \item \textbf{Data}: \texttt{Object} coordinates and basic magnitudes,
+  \texttt{Object\_NonPeriodic} features, \texttt{ForcedSource} or \texttt{DiaForcedSource}.
+  \item \textbf{Process:}
+    \begin{enumerate}
+      \item Pre-select \texttt{Object}s whose periodic or non-periodic features
+      make them candidates for the desired feature computation. For example, if
+      the goal is to find candidates with a 1.0 magnitude monotonic rise, then a
+      "min-to-max variation" feature (if provided by LSST) must be $\ge 1.0$ mag.
+      \item For each matching \texttt{Object}, obtain the light curve from
+      \texttt{ForcedSource}. Apply a function to each $n$-object window in the
+      light curve, in this case computing the change in magnitude between
+      visits, per unit time, and returning either a measurement value or a
+      boolean for whether a threshold is met.
+      \item For each \texttt{Object} meeting a feature threshold (if any),
+      return the computed features.
+    \end{enumerate}
+  \item \textbf{Performance Expectation}: Users can be expected to understand
+  that the runtime will scale significantly with the number of Objects that pass
+  the initial pre-filtering stage. Simple feature computations, such as for
+  monotonically brightening objects, are likely to be IO-bound, though
+  arbitrarily complex features could become CPU-bound.
+\end{itemize}
+
+\subsection{Light Curve Fitting}
+
+While the basic non-parametric features of a light curve can be used to
+determine whether objects are good candidates for particular classes of
+transients, more detailed parameters for these candidates are often extracted
+with a more detailed light curve fitting process.
+
+\begin{itemize}
+  \item \textbf{Goal}: Determine best-fitting light curve parameters, such as
+  (using supernovae as an example) amplitude, event duration, and time of peak brightness.
+  \item \textbf{Data}: \texttt{Object} coordinates and basic magnitudes,
+  \texttt{Object\_NonPeriodic} features or custom user-computed features (as in
+  Case~\ref{lc_features}),
+  \texttt{ForcedSource} or \texttt{DiaForcedSource}.
+  \item \textbf{Process}:
+    \begin{enumerate}
+      \item For each object passing an initial pre-selection function, pass the
+      entire light curve to a fitting function, such as a least-squares fitter.
+      \item Return a set of best-fit parameters for each object.
+    \end{enumerate}
+  \item \textbf{Performance Expectation}: Light curve fitting is very likely to
+  be entirely CPU-bound, and users should recognize the need to only pass
+  reasonable candidates to the fitting process.
+\end{itemize}
+
+\subsection{Light Curve Template Fitting}
+
+An alternative to fitting model light curves is comparing new objects to
+pre-existing light curves of known transient type. Computationally, this differs
+primarily from light curve fitting by requiring a library of light curves be
+available to each fitting process, but is likely to be less CPU-intensive.
+
+\begin{itemize}
+  \item \textbf{Goal}: Determine the best-matching light curve from a library of
+  templates, along with a temporal shift and possibly scale parameters. \item
+  \textbf{Data}: \texttt{Object} coordinates and basic magnitudes,
+  \texttt{Object\_NonPeriodic} features or custom user-computed features (as in
+  Case~\ref{lc_features}),
+  \texttt{ForcedSource} or \texttt{DiaForcedSource}.
+  \item \textbf{Process}:
+    \begin{enumerate}
+      \item For each object passing an initial pre-selection function, pass the
+      entire light curve and template library to a template-matching function.
+      \item Return a best-fit template and parameters for each object.
+    \end{enumerate}
+  \item \textbf{Performance Expectation}: Similar caveats apply as in the other
+  light curve fitting cases.
+\end{itemize}
+
+\subsection{Mini-batch Training of Machine Learning Models}
+
+A slightly more complicated data access pattern is required for machine learning
+models where each step in the training process operates on a small subsets of
+the data, so-called ``mini-batch'' training. The model parameters (weights) are
+updated after each batch, and the batches step through the entire dataset.
+Training light curve models is
+particularly well-suited to these batch methods, since the entire dataset is far
+too large to be processed simultaneously. An example of this method in
+\citet{2018NatAs...2..151N} uses a batch size of 500 light curves.
+
+\begin{itemize}
+  \item \textbf{Goal}: Train a light curve classification model via mini-batch updates.
+  \item \textbf{Data}: A user-provided set of labels (class definitions, e.g. RR
+  Lyrae, Cepheids) for \texttt{Object}s, and the corresponding light curves
+  (\texttt{ForcedSource}).
+  \item \textbf{Process}:
+  \begin{enumerate}
+    \item Select the number of light curves corresponding to the desired batch
+    size, joined with the user-provided class labels.
+    \item Pass this batch of records to the machine learning training process,
+    resulting in an updated state (e.g. weights in a neural network).
+    \item Repeat the process on a new batch, updating the model state until convergence.
+  \end{enumerate}
+  \item \textbf{Performance Expectation}: For many optimizers, the model update
+  is relatively inexpensive compared to the IO required for selecting and
+  loading each batch.
+\end{itemize}
+
+% Pre-selection of SNe targets may involve crossmatching with neighboring galaxies, and their photo-z
+
+% Custom lightcurve features, specific to something like a type I supernova: time of rise, peak brightness, delta M15, change in brightnesss over 15 days after peak. Type IIP: Slope of the plateau 100 days after peak brightness.
+% Lightcurve fitting, ``fitting'' a parameterized model of a favorite type of object
+% Template fitting, have an inventory of known light curves, find the closest match.
+
+% Periodic stars with extra stuff: Subtract off the best fitting period, amplitude, characterize the residuals
+
+\section{Internal QA}
+
+This section describes quality assurance tasks that are likely to be performed
+by the LSST operations team, but are unlikely to be scientifically useful on
+their own. These cases are thus subordinate in importance and may be solved by
+custom tools using data products directly from the Science Pipelines code, but
+would also fit naturally into a next-to-the-database framework.
+
+\subsection{Measurement Uniformity Across the Camera}
+
+A wide variety of tests of the science pipelines involve verifying that measured
+physical quantities are not correlated with observational ``nuisance
+parameters''. For example, objects should not appear fainter only when it falls
+on a specific CCD. While the pipelines are designed to calibrate out such
+effects as best they can, it is often possible to identify uncorrected
+deficiencies in these calibrations when large numbers of measurements are
+available.
+
+\begin{itemize}
+  \item \textbf{Goal}: Identify spatial features in the photometric or
+  astrometric calibration of images.
+  \item \textbf{Data}: \texttt{Object} point source photometry, \texttt{Source}
+  point source photometry for selected visits.
+  \item \textbf{Process}:
+  \begin{enumerate}
+    \item For visits matching some criteria (e.g. good seeing, bad seeing, high
+    or low airmass, etc), select a subset of \texttt{Source}s with ``good quality''
+    photometry or astrometry (non-variable, no flags, likely non-galaxies).
+    \item For each source, compute the difference between its measured magnitude
+    and the mean magnitude reported in the \texttt{Object} table, or between the
+    \texttt{Source}'s position and the mean on-sky position.
+    \item Bin the sources by focal plane coordinates, and compute the mean of
+    these residuals.
+  \end{enumerate}
+  \item \textbf{Performance Expectation}: Computing these maps for very large
+  sets of visits requires a very high data volume, and can be expected to be no
+  faster than the \texttt{Source} shared scan throughput. Analysis of smaller
+  sets of visits, of order dozens to hundreds of images, is likely to be a
+  semi-interactive task in which results are expected on a shorter timescale.
+\end{itemize}
+
+% Include all the relevant bib files.
+% https://lsst-texmf.lsst.io/lsstdoc.html#bibliographies
+\bibliography{DMTN-086,lsst,lsst-dm,refs_ads,refs,books}
+
+\end{document}
