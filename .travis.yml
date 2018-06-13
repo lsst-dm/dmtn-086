@@ -1,19 +1,19 @@
-sudo: false
+sudo: true
+dist: trusty
+services:
+  - docker
 language: python
-matrix:
-  include:
-    - python: "3.5"
-      env: LTD_MASON_BUILD=true
-install:
-  - pip install -r requirements.txt
-  - pip install "ltd-mason>=0.2,<0.3"
+python:
+  - '3.5'
+before_install:
+  - "pip install 'lander>=0.1.0,<0.2'"
 script:
-  - sphinx-build -b html -a -n -d _build/doctree . _build/html
-after_success:
-  - ltd-mason-travis --html-dir _build/html
+  # Compile PDF using containerized lsst-texmf
+  - "docker run --rm -v `pwd`:/workspace -w /workspace lsstsqre/lsst-texmf:latest sh -c 'make'"
+  # Deploy website. See https://github.com/lsst-sqre/lander for CLI options
+  - "lander --pdf DMTN-086.pdf --upload --lsstdoc DMTN-086.tex --env=travis --ltd-product dmtn-086"
 env:
   global:
-    - LTD_MASON_BUILD=false  # disable builds in regular text matrix
-    - LTD_MASON_PRODUCT="dmtn-086"
-    # Add AWS and LTD Keeper credentials as encrypted secrets here
-
+    # Add LSST the Docs credentials
+    - secure: "hWC/fapwDRT2HvNqG9WQIRvqxqmI9OoPBYtV9auKlekEWJZxxQOsirH7alWuhV9b+5CgUGu1qLyb9I0mnvsJ0bU/iuGDOoqmd28dY97Zfpaha6z35+nMF4EQREjxbqyRIid89e0Y4eGD/km1OoR1KtD+mG8c5Y8mRRxqwkUTocbXHoPgrZziQhWjGRIqRUv19Utcv3gHe+ExplE8gFBdcgpxTlI6WwY2SBB19eOaOJAMeUXgHHtKIgR9B2+i4wl0rPkjp5MD/OOs9XVlDv+TPqTJiwMsWduwyFggjJ2balKUXvdvNOzVHj4ZHO9rFRLLRwiYgF1Z8b7skE54v4sG/OBTkRGxh315VJBQdMYFBuhnCJTKVOzARnuW0IF46G3mSSy5XTMYOihaU4mZaLsrPePYSQUbJaNOrwobJrV04Da0xrof9rVH+UXgqJ9Wi0CiQLWB/wbGB3yvbB4pRTNIEDrLqG3MipaG+ZpwWJtoS7UGwHgtBimoWEcW0JkmRdxx98MMZHWuDdsSUBd9mLEu1Q6bittUdCKaDIC/uuCTgIpGS4L7/kud9sm4XUrg+mqL515KJmodor4Q3tREfL4cq9JDnXaH480BBa9gCSGkgimUymYZrw+d36L91c4pGbnPhx0bNDJy2QW9DWkNmfDE3Pv2nuA9QRWhQqdVJ1TyByY="
+    - secure: "ng4zBssHcHjo6CgyL7vqW9yOwbutNujwPP7JpGDEjyyzpwYOoQ3vzxXF3j93HfQObQVYnTch/K8HVWsooZ1mElpTUmYItQAupWjk6LKsMXitbg7jQaddI8ZUMqTe5BtGUVZdIiXObDaY76Vu0zuHAmc9JX1Cq4jmvxfAAEiFH0XuwuG+Rx4Cxn7rxQhJAUn6NhwQRM0LWZpHVHOBJSjWVenAWXSJP/fMQ5nY48n+QEXRQWk8MamfXU5cai13Xnd4tclfNNhto/Ws377/+Jg2HccIq5e8f8YNPbq7yeJIHahHT84YxKPbcV2R1XYf5ruKsIPzhT71snp4RlFPybOufkM/cykSlWjaG3R/bELkj0PyKWmTSgTJea/y4ozmsh5VRgqqZRFCWdXpVLanAuHjOX0BfRio3zKPxcBfSH4+EzADPG2xtXflDergn8amU1XjRFbcGWLWfErGJpMV43NttjveqP6lyKTiqLLE9H3S5Cig3dP1A/zREkTZYDfOBPLZ8xjDjPj6dhgQXgQV6jVEfCgGsSKFdLkUmkIzACaKIMxYFdysLJzrlmKOlPUim3/ActWxtwmUOxdQfMtesN0r4huRJ9gpabHlXp9pof5/z9aGgHPk6wbk9O3UVES2IHdKuimxnhHbyb2X3os7l/dj9Idx33ST4iMfn4F3SfTx/ck="
