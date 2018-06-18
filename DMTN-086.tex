@@ -34,7 +34,8 @@ Abstract text.
 % Fields: VERSION, DATE, DESCRIPTION, OWNER NAME.
 % See LPM-51 for version number policy.
 \setDocChangeRecord{%
-  \addtohist{1}{2018-03-25}{Unreleased.}{Colin Slater}
+  \addtohist{1}{2018-03-25}{Initial draft.}{Colin Slater}
+  \addtohist{2}{2018-06-18}{Add Galaxies \& Cosmology.}{Colin Slater}
 }
 
 \begin{document}
@@ -279,7 +280,7 @@ too large to be processed simultaneously. An example of this method in
 \end{itemize}
 
 % Pre-selection of SNe targets may involve crossmatching with neighboring
-%galaxies, and their photo-z
+%g alaxies, and their photo-z
 
 % Custom lightcurve features, specific to something like a type I supernova:
 %time of rise, peak brightness, delta M15, change in brightnesss over 15 days
@@ -290,14 +291,84 @@ too large to be processed simultaneously. An example of this method in
 % Periodic stars with extra stuff: Subtract off the best fitting period,
 %amplitude, characterize the residuals
 
-\section{Galaxy Correlation Functions}
+\section{Galaxies and Cosmology}
 
-\subsection{Galaxy count correlation functions with internal tree code}
+\subsection{Galaxy count correlation functions with user-supplied tree code}
 
 The goal of galaxy clustering analyses is to count the number of galaxies,
 subselected in some way, that are separated by a given angular distance,
-grouped into angular distance bins.
+grouped into angular distance bins. These binned counts are then compared to
+the counts obtained by counting the separations of random points distributed
+uniformly with the same survey geometry as the galaxy sample. 
 
+\begin{itemize}
+  \item \textbf{Goal}: Count galaxy separations in bins of angular distance,
+  and compare that from to randomly distributed points.
+  \item \textbf{Data}: \texttt{Object} table with coordinates and magnitudes
+  for galaxies; photometric redshifts from \texttt{Object\_Extra}, survey
+  geometry and depth maps (in HEALPix, for example).
+  \item \textbf{Process}: 
+    \begin{enumerate}
+      \item Select galaxies with the desired colors, magnitudes, and redshifts.
+      \item Divide the sample into roughly ~$50 \, \textrm{deg}^2$ regions of
+      sky, which will be processed independently. Larger regions can be used
+      if sufficient memory is available, but smaller regions would introduce
+      unacceptable artifacts at the largest correlation scales.
+      \item For each spatial region, run a community-standard correlation
+      function code (e.g. \texttt{TreeCorr}, which was used by DES,
+      \citealt{2017arXiv170801536E}), which
+      compute the separations using a KD-tree internally.
+      \item For each spatial region, generate a random distribution of points
+      similar to a ``mock'' catalog, using the completeness/depth map
+      information or other survey characterization data. The correlation
+      function code is run on this set of random points, and also on the
+      correlation between random points and true galaxies. The random catalog process is repeated 10-100 times.
+      \item Either sum the resulting galaxy and random data separately, or
+      return all spatial subset results separately to the user for analysis.
+    \end{enumerate}
+  \item \textbf{Performance Expectation}: This is expected to be an expensive
+  process both in CPU and in data IO, particularly if the sample selection is
+  done in the same analysis run as the correlation function computation. If
+  it were divided into two stages, the sample selection may be IO-bound, and a
+  much smaller set of galaxy with only their coordinates could be passed to
+  the CPU-bound correlation function code. This task may be overall better
+  suited to a batch system, depending on various implementation details.
+\end{itemize}
+
+
+\subsection{Photometric redshift evaluation}
+
+After a model for photometric redshifts has been trained on labeled galaxy
+data (obtained via spectroscopy, clustering, or other methods), the model
+needs to be applied to a much larger set of galaxies without training data,
+possibly including the entire galaxy catalog. The computation for each galaxy
+is expected to be relatively simple, but models may be highly varied and
+are entirely dependent on the user's chosen methodology. This method is an
+alternative to the pre-computed photometric redshifts provided in
+\texttt{Object\_Extra}, for specialists who want more control over the
+methods.
+
+The model-based (e.g. decision trees or neural networks) case is similar in
+data flow to template-based fitting, although the sizes of ancillary data may
+differ slightly. Note that there is not a corresponding use case for
+\textit{training} the model, since the training set is likely to be several
+orders of magnitude smaller than the full LSST \texttt{Object} catalog due to
+the need for spectroscopic redshifts. It is expected that training can be performed either via batch computing, notebooks, or user hardware.
+
+\begin{itemize}
+  \item \textbf{Goal}: Compute a photometric redshift point estimate, or likelihood function, for all galaxies in the survey.
+  \item \textbf{Data}: \texttt{Object} galaxy photometry (e.g. either
+  bulge-disk decompositon, or aperture magnitudes, etc.), and possibly shape
+  parameters. Photo-z model representation, unlikely to exceed $\sim$MB.
+  \item \textbf{Process}: 
+  \begin{enumerate}
+    \item For each galaxy, pass the \texttt{Object} table parameters to a user-defined function which evaluates the photo-z model, and returns one or more values.
+    \item The results should then be stored in a table suitable for joining with the \texttt{Object} table.
+  \end{enumerate}
+  \item \textbf{Performance Expectation}: Model evaluation is likely to be
+  fast, and the data volumes are moderate (because of the need for parameters
+  in all ugrizy bands.)
+\end{itemize}
 
 \section{Internal QA}
 
