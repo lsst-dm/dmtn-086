@@ -26,7 +26,7 @@ Colin Slater
 % \setDocCurator{The Curator of this Document}
 
 \setDocAbstract{%
-Abstract text.
+A set of candidate use cases for a next-to-the-database processing systsem.
 }
 
 % Change history defined here.
@@ -36,6 +36,7 @@ Abstract text.
 \setDocChangeRecord{%
   \addtohist{1}{2018-03-25}{Initial draft.}{Colin Slater}
   \addtohist{2}{2018-06-18}{Add Galaxies \& Cosmology.}{Colin Slater}
+  \addtohist{2}{2018-07-19}{Add Solar System example.}{Colin Slater}
 }
 
 \begin{document}
@@ -44,14 +45,15 @@ Abstract text.
 % Table of contents is added automatically with the "toc" class option.
 \maketitle
 
-
-\textbf{These use cases are \textit{\underline{not}} requirements!} The goal of
-this document is to describe a wide variety of notional use cases that may be
-productively met by a next-to-the-database processing system. Despite this goal,
-some of these use cases may turn out to be better served by a relational
-database, and some may be fall out of scope of the LSST database effort entirely
-if they impose excessive resource requirements.
-
+This document describes use cases that may be productively served by a
+next-to-the-database processing system. The intention is to span a wide range
+of cases in terms of science domain, data volume and CPU usage. Depending on
+the actual implementation of the next-to-the-database system, some of these
+cases may be better served by execution on a relational database, or on a
+batch processing system. This document is meant to be broadly inclusive of
+these cases in order to inform decisions on the delineations between these
+systems. Thus these use cases are \textit{\underline{not}} requirements, and
+should not be used to derive requirements without DM CCB approval.
 
 \section{Milky Way}
 
@@ -311,7 +313,8 @@ uniformly with the same survey geometry as the galaxy sample.
     \begin{enumerate}
       \item Select galaxies with the desired colors, magnitudes, and redshifts.
       \item Divide the sample into roughly ~$50 \, \textrm{deg}^2$ regions of
-      sky, which will be processed independently. Larger regions can be used
+      sky, which will be processed independently
+      \citep[c.f.][]{2017arXiv170801538T}. Larger regions can be used
       if sufficient memory is available, but smaller regions would introduce
       unacceptable artifacts at the largest correlation scales.
       \item For each spatial region, run a community-standard correlation
@@ -369,6 +372,53 @@ the need for spectroscopic redshifts. It is expected that training can be perfor
   fast, and the data volumes are moderate (because of the need for parameters
   in all ugrizy bands.)
 \end{itemize}
+
+\section{Solar System}
+
+\subsection{Asteroid properties}
+
+Because Solar System objects are continuously moving, their observed fluxes
+are dependent both on intrinsic object properties and the viewing geometry
+between the object, the Earth, and the Sun. Extracting the intrinsic
+properties such as albedo, color, or spin rate thus requires removing these
+geometric effects by computing the object's position, and thus heliocentric
+distance and phase angle, based on its orbit, then fitting an appropriate
+phase function to the lightcurve \citep{2010Icar..209..542M}.
+
+The LSST Alert Production Pipeline will perform this fitting for a chosen
+model (currently specified as a three-parameter H, G1, G2 model in the DPDD),
+but users may want to substitute their own choices. Users will also want to
+use the phase- and distance-corrected light curves for more sophsticated
+analyses, such as period-fiding or detection of outbursts and cometary activity.
+
+\begin{itemize}
+  \item \textbf{Goal}: Compute corrected light curves for Solar System objects.
+  \item \textbf{Data}: \texttt{SSObject}s and their corresponding
+  \texttt{DIASource}s and orbits.
+  \item \textbf{Process}:
+  \begin{enumerate}
+    \item For each \texttt{SSObject}, use the orbit to compute the position
+    of the object at the time of each observation. Based on this, the
+    helicoentric and geocentric distances can be computed, along with the
+    phase angle. This can be used to fit the phase function slope constants
+    (e.g. G1 and G2). The absolute magnitude for each object
+    apparition can then be computed.
+    \item The mean properties of the object (H, G1, G2) can either be
+    reported directly, or variations in the observed fluxes relative to the
+    expected fluxes can used for other light curve processing, such as
+    period finding or outlier detection.
+  \end{enumerate}
+  \item \textbf{Performance Expectation}: There are two general timescales on
+  which this process may be run. For studies of asteroid families, for
+  example, it is useful to have a complete sample produced by Data Release
+  Production and analyzed homogeneously. This carries performance
+  expectations that are comparable to other large light curve fitting use
+  cases, scaled appropriately by the smaller size of the \texttt{SSObject}
+  table. Alternatively, users may want to specifically refit newly identified
+  objects on a $\sim$ nightly timescale, which would require working on data
+  from the Prompt Products database.
+\end{itemize}
+
 
 \section{Internal QA}
 
